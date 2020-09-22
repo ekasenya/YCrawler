@@ -4,7 +4,7 @@ from html.parser import HTMLParser
 class HTMLNewsParser(HTMLParser):
     def __init__(self):
         super().__init__()
-        self.link_list = []
+        self.news_dict = {}
         self.current_id = 0
 
     def error(self, message):
@@ -33,14 +33,14 @@ class HTMLNewsParser(HTMLParser):
                     href = value
 
             if is_storylink and self.current_id:
-                self.link_list.append({'ID': self.current_id, 'URL': href})
+                self.news_dict[self.current_id] = href
                 self.current_id = 0
 
 
 class HTMLCommentsParser(HTMLParser):
     def __init__(self):
         super().__init__()
-        self.comment_list = []
+        self.url_list = []
         self.is_comment = False
         self.inner_span_counter = 0
 
@@ -52,14 +52,13 @@ class HTMLCommentsParser(HTMLParser):
             if self.is_comment:
                 self.inner_span_counter += 1
             else:
-                self.is_comment = False
                 for name, value in attrs:
                     if name.lower() == 'class' and value.lower() == 'commtext c00':
                         self.is_comment = True
         elif tag.lower() == 'a' and self.is_comment:
             for name, value in attrs:
                 if name.lower() == 'href':
-                    self.comment_list.append(value)
+                    self.url_list.append(value)
 
     def handle_endtag(self, tag):
         if tag.lower() == 'span' and self.is_comment:
