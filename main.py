@@ -3,13 +3,11 @@ import asyncio
 import logging
 import os
 import sys
-import time
 from mimetypes import guess_extension
 
 import aiofiles
 import aiohttp
-
-from parser import HTMLNewsParser, HTMLCommentsParser
+from bs4 import BeautifulSoup
 
 NEWS_URL = "https://news.ycombinator.com"
 COMMENT_URL_TEMPLATE = "https://news.ycombinator.com/item?id={}"
@@ -74,12 +72,16 @@ async def download_news(dir, id, url):
                 html, _ = await get_page(client, comment_url)
 
                 if html:
-                    parser = HTMLCommentsParser()
-                    parser.feed(html.decode("utf-8"))
+                    parser = BeautifulSoup(markup=html.decode("utf-8"), features='html.parser')
+
+                    url_list = []
+                    for item in parser.find_all("span", class_="commtext c00"):
+                        for link in item.find_all("a"):
+                            url_list.append(link.attrs['href'])
 
                     logging.info('Start downloading {} links from comments (count = {})'
-                                 .format(url, len(parser.url_list)))
-                    await download_comment_links(client, path, parser.url_list)
+                                 .format(url, len(url_list)))
+                    await download_comment_links(client, path, url_list)
             except aiohttp.ClientResponseError as ex:
                 # try to process news on the next iteration
                 if ex.status == 503:
@@ -98,14 +100,14 @@ async def main(args):
         logging.info('Start crawling iteration...')
         async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=False)) as client:
             html, _ = await get_page(client, NEWS_URL)
-        # await asyncio.sleep(0.1)
-        parser = HTMLNewsParser()
-        parser.feed(html.decode("utf-8"))
+
+        parser = BeautifulSoup(markup=html.decode("utf-8"), features='html.parser')
 
         tasks = []
-        for id, url in parser.news_dict.items():
-            if id not in processed_news:
-                tasks.append(asyncio.create_task(download_news(args.save_path, id, url)))
+        for item in parser.find_all("tr", class_="athing"):
+            link = item.select_one("a.storylink")
+            if item.attrs['id'] not in processed_news:
+                tasks.append(asyncio.create_task(download_news(args.save_path, item.attrs['id'], link.attrs['href'])))
 
         # add processed news id
         processed_news.update(await asyncio.gather(*tasks, return_exceptions=True))
