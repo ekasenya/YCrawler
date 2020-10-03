@@ -49,7 +49,7 @@ async def download_comment_links(client, path, url_list):
     await asyncio.gather(*tasks, return_exceptions=True)
 
 
-async def download_news(dir, id, url, lock):
+async def download_news(dir, id, url):
     path = os.path.join(dir, id)
 
     if not(url.startswith('http://') or url.startswith('https://')):
@@ -71,10 +71,7 @@ async def download_news(dir, id, url, lock):
             comment_url = COMMENT_URL_TEMPLATE.format(id)
 
             try:
-                async with lock:
-                    html, _ = await get_page(client, comment_url)
-                    # to avoid server 503 response
-                    await asyncio.sleep(0.5)
+                html, _ = await get_page(client, comment_url)
 
                 if html:
                     parser = HTMLCommentsParser()
@@ -97,19 +94,18 @@ async def download_news(dir, id, url, lock):
 async def main(args):
     processed_news = set()
 
-    lock = asyncio.Lock()
     while True:
         logging.info('Start crawling iteration...')
         async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=False)) as client:
             html, _ = await get_page(client, NEWS_URL)
-        await asyncio.sleep(0.1)
+        # await asyncio.sleep(0.1)
         parser = HTMLNewsParser()
         parser.feed(html.decode("utf-8"))
 
         tasks = []
         for id, url in parser.news_dict.items():
             if id not in processed_news:
-                tasks.append(asyncio.create_task(download_news(args.save_path, id, url, lock)))
+                tasks.append(asyncio.create_task(download_news(args.save_path, id, url)))
 
         # add processed news id
         processed_news.update(await asyncio.gather(*tasks, return_exceptions=True))
